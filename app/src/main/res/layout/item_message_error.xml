@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:background="@drawable/message_error_background"
             android:textColor="#ff6b6b"
-            android:padding="12dp 16dp"
+            android:paddingVertical="12dp" android:paddingHorizontal="16dp"
             android:textSize="14sp"
             android:lineSpacingMultiplier="1.2" />
 

@@ -4,87 +4,69 @@ import ai.opencode.mobile.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import okhttp3.*
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
+import com.launchdarkly.eventsource.EventSource
+import com.launchdarkly.eventsource.EventHandler
+import com.launchdarkly.eventsource.MessageEvent
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 class SessionManager private constructor() {
     private val _sessions = MutableStateFlow<List<Session>>(emptyList())
     val sessions: StateFlow<List<Session>> = _sessions
-    
+
     private val _currentSession = MutableStateFlow<Session?>(null)
     val currentSession: StateFlow<Session?> = _currentSession
-    
+
     private val _messages = MutableStateFlow<Map<String, List<Message>>>(emptyMap())
-    
-    private val eventSourceFactory = EventSources.createFactory(
-        OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.SECONDS) // No timeout for SSE
-            .build()
-    )
-    
+
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .build()
+
     private var currentEventSource: EventSource? = null
-    
+
     companion object {
         @Volatile
         private var instance: SessionManager? = null
-        
+
         fun getInstance(): SessionManager {
             return instance ?: synchronized(this) {
                 instance ?: SessionManager().also { instance = it }
             }
         }
     }
-    
-    fun setSessions(sessionList: List<Session>) {
-        _sessions.value = sessionList
+
+    fun setSessions(sessions: List<Session>) {
+        _sessions.value = sessions
     }
-    
-    fun addSession(session: Session) {
-        _sessions.value = _sessions.value + session
-    }
-    
-    fun removeSession(sessionID: String) {
-        _sessions.value = _sessions.value.filter { it.id != sessionID }
-        if (_currentSession.value?.id == sessionID) {
-            _currentSession.value = null
-        }
-    }
-    
+
     fun setCurrentSession(session: Session?) {
         _currentSession.value = session
     }
-    
-    fun updateSessionStatus(sessionID: String, status: SessionStatus) {
-        _sessions.value = _sessions.value.map { session ->
-            if (session.id == sessionID) {
-                session.copy(status = status)
-            } else {
-                session
-            }
+
+    fun updateSessionStatus(sessionId: String, status: SessionStatus) {
+        _sessions.value = _sessions.value.map {
+            if (it.id == sessionId) it.copy(status = status) else it
         }
-        
-        if (_currentSession.value?.id == sessionID) {
+        if (_currentSession.value?.id == sessionId) {
             _currentSession.value = _currentSession.value?.copy(status = status)
         }
     }
-    
-    fun getMessages(sessionID: String): List<Message> {
-        return _messages.value[sessionID] ?: emptyList()
+
+    fun addSession(session: Session) {
+        _sessions.value = _sessions.value + session
     }
-    
-    fun addMessage(sessionID: String, message: Message) {
-        val currentMessages = _messages.value[sessionID] ?: emptyList()
-        _messages.value = _messages.value + (sessionID to (currentMessages + message))
+
+    fun addMessage(sessionId: String, message: Message) {
+        val currentMessages = _messages.value[sessionId] ?: emptyList()
+        _messages.value = _messages.value + (sessionId to (currentMessages + message))
     }
-    
-    fun clearMessages(sessionID: String) {
-        _messages.value = _messages.value - sessionID
+
+    fun getMessages(sessionId: String): List<Message> {
+        return _messages.value[sessionId] ?: emptyList()
     }
-    
+
     fun connectToEventStream(
         serverUrl: String,
         username: String,
@@ -92,52 +74,54 @@ class SessionManager private constructor() {
         onEvent: (ServerEvent) -> Unit,
         onError: (Throwable) -> Unit
     ) {
-        currentEventSource?.cancel()
-        
-        val request = Request.Builder()
-            .url("$serverUrl/event")
-            .addHeader("Authorization", Credentials.basic(username, password))
-            .addHeader("Accept", "text/event-stream")
-            .build()
-        
-        currentEventSource = eventSourceFactory.newEventSource(request, object : EventSourceListener() {
-            override fun onOpen(eventSource: EventSource, response: Response) {
+        currentEventSource?.close()
+
+        val handler = object : EventHandler {
+            override fun onOpen() {
                 // Connected
             }
-            
-            override fun onEvent(
-                eventSource: EventSource,
-                id: String?,
-                type: String?,
-                data: String
-            ) {
-                try {
-                    val json = JSONObject(data)
-                    onEvent(ServerEvent(type ?: "message", json))
-                } catch (e: Exception) {
-                    onEvent(ServerEvent("raw", JSONObject().put("data", data)))
-                }
-            }
-            
-            override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) {
-                onError(t ?: Exception("Unknown error"))
-            }
-            
-            override fun onClosed(eventSource: EventSource) {
+
+            override fun onClosed() {
                 // Connection closed
             }
-        })
+
+            override fun onMessage(event: String?, messageEvent: MessageEvent) {
+                try {
+                    val json = JSONObject(messageEvent.data)
+                    onEvent(ServerEvent(event ?: "message", json))
+                } catch (e: Exception) {
+                    onEvent(ServerEvent("raw", JSONObject().put("data", messageEvent.data)))
+                }
+            }
+
+            override fun onComment(comment: String) {
+                // Comment received
+            }
+
+            override fun onError(t: Throwable) {
+                onError(t)
+            }
+        }
+
+        val eventSourceBuilder = EventSource.Builder(handler, java.net.URI.create("$serverUrl/event"))
+            .client(client)
+            .headers(Headers.Builder()
+                .add("Authorization", Credentials.basic(username, password))
+                .add("Accept", "text/event-stream")
+                .build())
+
+        currentEventSource = eventSourceBuilder.build()
+        currentEventSource?.start()
     }
-    
+
     fun disconnectEventStream() {
-        currentEventSource?.cancel()
+        currentEventSource?.close()
         currentEventSource = null
     }
-    
+
     fun clear() {
         _sessions.value = emptyList()
         _currentSession.value = null
         _messages.value = emptyMap()
-        disconnectEventStream()
     }
 }

@@ -27,7 +27,7 @@
             android:layout_height="wrap_content"
             android:background="@drawable/message_assistant_background"
             android:textColor="#fff"
-            android:padding="12dp 16dp"
+            android:paddingVertical="12dp" android:paddingHorizontal="16dp"
             android:textSize="15sp"
             android:lineSpacingMultiplier="1.2" />
 

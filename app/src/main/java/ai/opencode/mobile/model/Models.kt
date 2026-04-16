@@ -69,7 +69,7 @@ data class ToolResult(
     val isError: Boolean = false
 )
 
-data class Message(
+data class ApiMessage(
     val info: MessageInfo,
     val parts: List<MessagePart>
 ) {

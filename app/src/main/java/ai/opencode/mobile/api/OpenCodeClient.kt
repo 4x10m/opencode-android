@@ -9,9 +9,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.sse.EventSource
-import okhttp3.sse.EventSourceListener
-import okhttp3.sse.EventSources
+import kotlinx.coroutines.withContext
+import com.launchdarkly.eventsource.EventSource
+
+
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -301,7 +302,7 @@ class OpenCodeClient(
                 id = providerJson.optString("id", ""),
                 name = providerJson.optString("name", ""),
                 isConnected = providerJson.optBoolean("isConnected", false),
-                models = (0 until providerJson.optJSONArray("models")?.length().orDefault(0)).map { j ->
+                models = (0 until (providerJson.optJSONArray("models")?.length() ?: 0)).map { j ->
                     providerJson.optJSONArray("models")?.getString(j) ?: ""
                 }
             )
@@ -330,7 +331,7 @@ class OpenCodeClient(
             Command(
                 name = json.optString("name", ""),
                 description = json.optString("description", ""),
-                arguments = (0 until json.optJSONArray("arguments")?.length().orDefault(0)).map { j ->
+                arguments = (0 until (json.optJSONArray("arguments")?.length() ?: 0)).map { j ->
                     val argJson = json.optJSONArray("arguments")?.getJSONObject(j)
                     CommandArgument(
                         name = argJson?.optString("name", "") ?: "",
@@ -428,7 +429,7 @@ class OpenCodeClient(
             )
         }
         
-        return Message(info, parts)
+        return ApiMessage(info, parts)
     }
 }
 

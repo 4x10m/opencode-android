@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:background="@drawable/message_system_background"
         android:textColor="#888"
-        android:padding="12dp 24dp"
+        android:paddingVertical="12dp" android:paddingHorizontal="24dp"
         android:textSize="14sp"
         android:gravity="center"
         android:lineSpacingMultiplier="1.3" />

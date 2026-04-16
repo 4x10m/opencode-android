@@ -46,7 +46,7 @@
             android:hint="Ask me to code something..."
             android:textColorHint="#666"
             android:textColor="#fff"
-            android:padding="12dp 16dp"
+            android:paddingVertical="12dp" android:paddingHorizontal="16dp"
             android:maxLines="4"
             android:inputType="textCapSentences|textMultiLine" />
 
